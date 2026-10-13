@@ -10,7 +10,8 @@ const cartStore = useCartStore()
     <div class="flex items-center justify-between px-5 pt-5">
       <div>
         <p class="text-xs font-semibold uppercase tracking-wide text-text-muted">บิลปัจจุบัน</p>
-        <p class="text-lg font-bold text-text">#{{ 1024 }}</p>
+        <!-- the real order number is assigned by the server only once this bill is sent or paid -->
+        <p class="text-lg font-bold text-text">{{ cartStore.items.length ? `${cartStore.items.length} รายการ` : 'ยังไม่มีรายการ' }}</p>
       </div>
       <button
         v-if="cartStore.items.length"

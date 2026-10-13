@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { Clock, Banknote, CreditCard, QrCode, Trash2 } from '@lucide/vue'
 import { orderService, type OrderView } from '../../api/services/orderService'
 import { errorMessage } from '../../store/modules/productStore'
+import PromptPayQr from '../../components/PromptPayQr.vue'
 import ReceiptModal from '../../components/ReceiptModal.vue'
 
 const orders = ref<OrderView[]>([])
@@ -121,6 +122,9 @@ async function discard(order: OrderView) {
           >
             <component :is="m.icon" class="h-6 w-6" :stroke-width="1.75" />{{ m.label }}
           </button>
+        </div>
+        <div v-if="method === 'qr'" class="mb-4">
+          <PromptPayQr :amount="paying.total" />
         </div>
         <div v-if="method === 'cash'" class="mb-4">
           <input v-model.number="received" type="number" min="0" :placeholder="`รับเงิน (เว้นว่าง = พอดี ${baht(paying.total)})`" class="w-full rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary" />

@@ -17,6 +17,7 @@ export interface OrderView {
   tax: number
   total: number
   paymentMethod: 'cash' | 'card' | 'qr' | null
+  kitchenStatus: 'pending' | 'preparing' | 'ready' | 'served'
   customerId: number | null
   customerName: string | null
   pointsRedeemed: number
@@ -27,8 +28,16 @@ export interface OrderView {
   items: { productId: number; name: string; qty: number; price: number }[]
 }
 
+export interface CreateOrderPayload {
+  items: OrderItemInput[]
+  discountId?: number
+  customerId?: number
+  redeemPoints?: number
+  allowOversell?: boolean
+}
+
 export const orderService = {
-  create(payload: { items: OrderItemInput[]; discountId?: number; customerId?: number; redeemPoints?: number }) {
+  create(payload: CreateOrderPayload) {
     return apiClient.post<{ data: OrderView }>('/orders', payload)
   },
   pay(orderId: number, method: 'cash' | 'card' | 'qr', received?: number) {
@@ -45,10 +54,31 @@ export const orderService = {
   listOpen() {
     return apiClient.get<{ data: PageResult<OrderView> }>('/orders', { params: { status: 'open', page: 1, pageSize: 100 } })
   },
+  kitchenQueue() {
+    return apiClient.get<{ data: OrderView[] }>('/orders/kitchen')
+  },
+  updateKitchenStatus(orderId: number, status: 'pending' | 'preparing' | 'ready' | 'served') {
+    return apiClient.patch<{ data: OrderView }>(`/orders/${orderId}/kitchen`, { status })
+  },
   discard(orderId: number) {
     return apiClient.post(`/orders/${orderId}/discard`)
   },
   void(orderId: number, reason: string) {
     return apiClient.post<{ data: OrderView }>(`/orders/${orderId}/void`, { reason })
   },
+}
+
+// Creates an order; if the server reports too little stock and the user is allowed to override
+// (owner/manager), asks for confirmation and retries once with the override flag.
+export async function createOrderConfirmingStock(payload: CreateOrderPayload) {
+  try {
+    return await orderService.create(payload)
+  } catch (error: unknown) {
+    const info = (error as { response?: { data?: { message?: { code?: string; canOverride?: boolean; message?: string } } } })
+      ?.response?.data?.message
+    if (info?.code === 'INSUFFICIENT_STOCK' && info.canOverride && window.confirm(`${info.message}\n\nขายต่อทั้งที่สต็อกไม่พอไหม?`)) {
+      return orderService.create({ ...payload, allowOversell: true })
+    }
+    throw error
+  }
 }

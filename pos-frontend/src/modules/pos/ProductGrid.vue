@@ -2,12 +2,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { UtensilsCrossed, Plus } from '@lucide/vue'
+import { useAuthStore } from '../../store/modules/authStore'
 import { useCartStore } from '../../store/modules/cartStore'
 import { useProductStore, errorMessage, imageSrc, type Product } from '../../store/modules/productStore'
 import { useProductIcon } from '../../composables/useProductIcon'
 
 const productStore = useProductStore()
 const cartStore = useCartStore()
+const authStore = useAuthStore()
 const { iconForCategory } = useProductIcon()
 
 onMounted(() => {
@@ -22,7 +24,16 @@ const filteredProducts = computed(() =>
     : productStore.activeProducts.filter((p) => p.categoryId === activeCategoryId.value),
 )
 
+function isTracked(product: Product) {
+  return product.trackStock
+}
+
 function addToCart(product: Product) {
+  // cashiers cannot sell past the counted stock; owner/manager can (the server asks them to confirm)
+  if (isTracked(product) && qtyInCart(product.id) + 1 > product.stockQty && authStore.user?.role === 'cashier') {
+    toast.error(product.stockQty > 0 ? `${product.name} เหลือ ${product.stockQty} ${product.unit}` : `${product.name} หมดแล้ว`)
+    return
+  }
   cartStore.addItem({ productId: product.id, name: product.name, price: product.price, qty: 1, discount: 0 })
 }
 
@@ -64,6 +75,7 @@ function qtyInCart(id: number) {
         v-for="product in filteredProducts"
         :key="product.id"
         class="group relative flex flex-col overflow-hidden rounded-3xl bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:shadow-md"
+        :class="isTracked(product) && product.stockQty <= 0 ? 'opacity-60' : ''"
       >
         <div class="flex aspect-square items-center justify-center overflow-hidden bg-primary-soft text-primary">
           <img v-if="product.imageUrl" :src="imageSrc(product.imageUrl) ?? ''" :alt="product.name" class="h-full w-full object-cover" />
@@ -87,6 +99,9 @@ function qtyInCart(id: number) {
         <div class="p-3">
           <p class="truncate text-sm font-semibold text-text">{{ product.name }}</p>
           <p class="text-sm font-bold text-text-muted">฿{{ product.price.toFixed(0) }}</p>
+          <p v-if="isTracked(product)" class="mt-0.5 text-xs font-medium" :class="product.stockQty <= 0 ? 'text-danger' : product.stockQty <= product.minStock ? 'text-warning' : 'text-text-muted'">
+            {{ product.stockQty <= 0 ? 'หมด' : `เหลือ ${product.stockQty}` }}
+          </p>
         </div>
       </div>
     </div>

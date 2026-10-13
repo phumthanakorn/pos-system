@@ -10,6 +10,7 @@ export interface ShopSettings {
   logoUrl: string | null
   taxId: string
   receiptFooter: string
+  promptPayId: string
 }
 
 export interface TaxSettings {

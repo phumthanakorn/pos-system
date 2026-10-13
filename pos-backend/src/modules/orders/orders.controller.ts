@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { AuthGuard } from '../../common/guards/auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
@@ -6,6 +6,7 @@ import { AuthenticatedUser, requireShopId } from '../../common/helpers/require-s
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { ListOrdersDto } from './dto/list-orders.dto.js';
 import { PayOrderDto } from './dto/pay-order.dto.js';
+import { UpdateKitchenStatusDto } from './dto/update-kitchen-status.dto.js';
 import { VoidOrderDto } from './dto/void-order.dto.js';
 import { OrdersService } from './orders.service.js';
 
@@ -17,6 +18,20 @@ export class OrdersController {
   @Get()
   list(@Req() req: { user: AuthenticatedUser }, @Query() query: ListOrdersDto) {
     return this.ordersService.list(requireShopId(req.user), query);
+  }
+
+  @Get('kitchen')
+  kitchenQueue(@Req() req: { user: AuthenticatedUser }) {
+    return this.ordersService.kitchenQueue(requireShopId(req.user));
+  }
+
+  @Patch(':id/kitchen')
+  updateKitchen(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateKitchenStatusDto,
+  ) {
+    return this.ordersService.updateKitchenStatus(requireShopId(req.user), id, dto.status);
   }
 
   @Post()

@@ -1,4 +1,5 @@
 import { apiClient } from '../client'
+import type { PageResult } from '../types'
 
 export interface CashMovementView {
   id: number
@@ -40,7 +41,36 @@ export interface CloseShiftResult {
   difference: number
 }
 
+export interface ShiftHistoryItem {
+  id: number
+  cashierName: string
+  openedAt: string
+  closedAt: string | null
+  openingCash: number
+  sales: SalesSummary
+  cashIn: number
+  cashOut: number
+  expectedCash: number
+  closingCash: number
+  difference: number
+  cancelledCount: number
+  cancelledAmount: number
+}
+
+export interface ShiftDetail extends ShiftView {
+  status: 'open' | 'closed'
+  closedAt: string | null
+  closingCash: number | null
+  difference: number | null
+}
+
 export const shiftService = {
+  history(params: { page: number; pageSize: number }) {
+    return apiClient.get<{ data: PageResult<ShiftHistoryItem> }>('/shifts/history', { params })
+  },
+  detail(id: number) {
+    return apiClient.get<{ data: ShiftDetail }>(`/shifts/${id}`)
+  },
   getCurrent() {
     return apiClient.get<{ data: ShiftView | null }>('/shifts/current')
   },

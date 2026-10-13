@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { UpdateShopDto } from './dto/update-shop.dto.js';
+import { detectPromptPayKind } from '../../common/helpers/promptpay.js';
 import { parseLoyalty } from '../../common/helpers/loyalty.js';
 import { UpdateLoyaltyDto } from './dto/update-loyalty.dto.js';
 import { UpdateReceiptDto } from './dto/update-receipt.dto.js';
@@ -8,6 +9,7 @@ import { UpdateTaxDto } from './dto/update-tax.dto.js';
 
 const KEY_TAX_ID = 'tax_id';
 const KEY_RECEIPT_FOOTER = 'receipt_footer';
+const KEY_PROMPTPAY = 'promptpay_id';
 const KEY_RECEIPT_OPTIONS = 'receipt_options';
 const KEY_LOYALTY = 'loyalty';
 export const DEFAULT_RECEIPT = {
@@ -42,7 +44,7 @@ export class SettingsService {
     const [shop, tax, extras] = await Promise.all([
       this.prisma.shop.findUnique({ where: { id: shopId } }),
       this.prisma.taxSetting.findFirst({ where: { shopId }, orderBy: { id: 'asc' } }),
-      this.prisma.setting.findMany({ where: { shopId, key: { in: [KEY_TAX_ID, KEY_RECEIPT_FOOTER, KEY_RECEIPT_OPTIONS, KEY_LOYALTY] } } }),
+      this.prisma.setting.findMany({ where: { shopId, key: { in: [KEY_TAX_ID, KEY_RECEIPT_FOOTER, KEY_PROMPTPAY, KEY_RECEIPT_OPTIONS, KEY_LOYALTY] } } }),
     ]);
     if (!shop) {
       throw new NotFoundException('ไม่พบร้าน');
@@ -59,6 +61,7 @@ export class SettingsService {
         logoUrl: shop.logoUrl,
         taxId: extra.get(KEY_TAX_ID) ?? '',
         receiptFooter: extra.get(KEY_RECEIPT_FOOTER) ?? '',
+        promptPayId: extra.get(KEY_PROMPTPAY) ?? '',
       },
       receipt: parseReceipt(extra.get(KEY_RECEIPT_OPTIONS)),
       loyalty: parseLoyalty(extra.get(KEY_LOYALTY)),
@@ -69,6 +72,10 @@ export class SettingsService {
   }
 
   async updateShop(shopId: number, dto: UpdateShopDto) {
+    const promptPay = dto.promptPayId?.replace(/\D/g, '');
+    if (promptPay && !detectPromptPayKind(promptPay)) {
+      throw new BadRequestException('เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก เลขบัตรประชาชน 13 หลัก หรือ e-Wallet 15 หลัก');
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.shop.update({
         where: { id: shopId },
@@ -84,6 +91,7 @@ export class SettingsService {
       for (const [key, value] of [
         [KEY_TAX_ID, dto.taxId],
         [KEY_RECEIPT_FOOTER, dto.receiptFooter],
+        [KEY_PROMPTPAY, dto.promptPayId === undefined ? undefined : (promptPay ?? '')],
       ] as const) {
         if (value === undefined) continue;
         await tx.setting.upsert({

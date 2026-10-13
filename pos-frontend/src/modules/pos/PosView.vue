@@ -9,14 +9,17 @@ import PaymentModal from './PaymentModal.vue'
 import CustomerPicker from './CustomerPicker.vue'
 import type { Customer } from '../../api/services/customerService'
 import ReceiptModal from '../../components/ReceiptModal.vue'
-import { orderService, type OrderView } from '../../api/services/orderService'
+import { createOrderConfirmingStock, type OrderView } from '../../api/services/orderService'
 import { toast } from 'vue-sonner'
-import { errorMessage } from '../../store/modules/productStore'
+import { errorMessage, useProductStore } from '../../store/modules/productStore'
+import { useAuthStore } from '../../store/modules/authStore'
 import { useCartStore } from '../../store/modules/cartStore'
 import { useShiftStore } from '../../store/modules/shiftStore'
 import { settingsService } from '../../api/services/settingsService'
 import { discountService, type DiscountView } from '../../api/services/discountService'
-import { Percent, X, UserRound } from '@lucide/vue'
+import { Percent, X, UserRound, Monitor } from '@lucide/vue'
+import { getDisplayChannel } from '../../store/broadcast'
+import { watch } from 'vue'
 
 const router = useRouter()
 const showDiscounts = ref(false)
@@ -57,8 +60,9 @@ async function holdOrder() {
   }
   holding.value = true
   try {
-    const { data } = await orderService.create(cartStore.orderPayload())
+    const { data } = await createOrderConfirmingStock(cartStore.orderPayload())
     cartStore.clear()
+    void productStore.load().catch(() => undefined)
     toast.success(`ส่งคำสั่งแล้ว ${data.data.orderNumber}`, { description: 'ชำระเงินได้ที่เมนู ออเดอร์ที่เปิดอยู่' })
   } catch (error: unknown) {
     toast.error(errorMessage(error, 'ส่งคำสั่งไม่สำเร็จ'))
@@ -69,7 +73,27 @@ async function holdOrder() {
 const receipt = ref<{ order: OrderView; received: number; change: number } | null>(null)
 const now = useNow()
 const cartStore = useCartStore()
+const productStore = useProductStore()
+const authStore = useAuthStore()
 const shiftStore = useShiftStore()
+
+const channel = getDisplayChannel()
+function broadcastCart() {
+  channel?.postMessage({
+    type: 'cart',
+    shopName: authStore.shop?.name ?? '',
+    items: cartStore.items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+    subtotal: cartStore.subtotal,
+    discount: cartStore.discount,
+    tax: cartStore.tax,
+    total: cartStore.total,
+  })
+}
+watch(() => [cartStore.items, cartStore.selectedDiscount, cartStore.redeemPoints, cartStore.taxSettings], broadcastCart, { deep: true })
+
+function openCustomerDisplay() {
+  window.open('/customer-display', 'pos-customer-display', 'width=480,height=800')
+}
 
 onMounted(() => {
   shiftStore.load().catch(() => {})
@@ -103,6 +127,9 @@ onMounted(() => {
         >
           <Circle class="h-2 w-2 fill-current" />
           ยังไม่เปิดกะ · เปิดกะ
+        </button>
+        <button class="flex items-center gap-1.5 rounded-full bg-bg px-3 py-1 text-xs font-semibold text-ink-soft hover:bg-border" title="เปิดจอแสดงให้ลูกค้าดูในหน้าต่างใหม่" @click="openCustomerDisplay">
+          <Monitor class="h-3.5 w-3.5" /> จอลูกค้า
         </button>
         <time>{{ now.toLocaleTimeString('th-TH') }}</time>
       </div>

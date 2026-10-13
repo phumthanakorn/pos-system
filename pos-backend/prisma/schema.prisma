@@ -31,6 +31,13 @@ enum ShiftStatus {
   closed
 }
 
+enum KitchenStatus {
+  pending
+  preparing
+  ready
+  served
+}
+
 enum OrderStatus {
   open
   paid
@@ -216,6 +223,7 @@ model Order {
   pointsRedeemed Int       @default(0) @map("points_redeemed")
   pointsEarned   Int       @default(0) @map("points_earned")
   pointEntries   PointTransaction[]
+  kitchenStatus  KitchenStatus @default(pending) @map("kitchen_status")
 
   items    OrderItem[]
   payments Payment[]

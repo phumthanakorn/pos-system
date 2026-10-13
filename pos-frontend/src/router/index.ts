@@ -22,10 +22,21 @@ const router = createRouter({
       component: () => import('../modules/onboarding/SetupView.vue'),
     },
     {
+      // standalone, no admin chrome — meant for a second monitor facing the customer
+      path: '/customer-display',
+      name: 'customer-display',
+      component: () => import('../modules/pos/CustomerDisplayView.vue'),
+    },
+    {
       path: '/',
       component: AdminLayout,
       children: [
         { path: '', name: 'pos', component: PosView },
+        {
+          path: 'kitchen',
+          name: 'kitchen',
+          component: () => import('../modules/kitchen/KitchenView.vue'),
+        },
         {
           path: 'loyalty',
           name: 'loyalty',
@@ -45,6 +56,12 @@ const router = createRouter({
           path: 'inventory',
           name: 'inventory',
           component: () => import('../modules/inventory/InventoryView.vue'),
+          meta: { roles: ['owner', 'manager'] },
+        },
+        {
+          path: 'shifts/history',
+          name: 'shift-history',
+          component: () => import('../modules/shifts/ShiftHistoryView.vue'),
           meta: { roles: ['owner', 'manager'] },
         },
         {

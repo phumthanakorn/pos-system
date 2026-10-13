@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ChefHat } from '@lucide/vue'
 import {
   Store,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   FileText,
   Package,
   Timer,
+  History,
   UtensilsCrossed,
   BarChart3,
   Settings,
@@ -30,7 +32,9 @@ const allGroups: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'สั่งและชำระเงิน', icon: ClipboardList },
       { to: '/open-orders', label: 'ออเดอร์ที่เปิดอยู่', icon: Clock },
+      { to: '/kitchen', label: 'จอครัว', icon: ChefHat },
       { to: '/shifts', label: 'รอบการขาย', icon: Timer },
+      { to: '/shifts/history', label: 'ประวัติรอบขาย', icon: History, roles: ['owner', 'manager'] },
       { to: '/receipts', label: 'ประวัติใบเสร็จ', icon: FileText },
     ],
   },

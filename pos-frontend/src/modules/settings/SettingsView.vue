@@ -67,6 +67,7 @@ const shop = reactive<ShopSettings>({
   logoUrl: null,
   taxId: '',
   receiptFooter: '',
+  promptPayId: '',
 })
 const loyalty = reactive<LoyaltySettings>({ enabled: false, bahtPerPoint: 25, pointsPerBaht: 10 })
 const savingLoyalty = ref(false)
@@ -99,6 +100,7 @@ const sampleOrder: OrderView = {
   tax: 0,
   total: 190,
   paymentMethod: 'cash',
+  kitchenStatus: 'served',
   customerId: 1,
   customerName: 'คุณสมชาย',
   pointsRedeemed: 0,
@@ -297,6 +299,10 @@ async function saveTax() {
             <div>
               <label class="mb-1 block text-xs font-semibold text-text-muted">ที่อยู่</label>
               <input v-model="shop.address" :disabled="!canEdit" type="text" :class="inputClass" />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-text-muted">เลขพร้อมเพย์ (เบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก)</label>
+              <input v-model="shop.promptPayId" :disabled="!canEdit" inputmode="numeric" maxlength="15" placeholder="ใช้สร้าง QR รับเงินตอนชำระ" type="text" :class="inputClass" />
             </div>
             <div>
               <label class="mb-1 block text-xs font-semibold text-text-muted">เลขประจำตัวผู้เสียภาษี (13 หลัก)</label>

@@ -32,6 +32,7 @@ function toView(order: OrderRow) {
     tax: Number(order.tax),
     total: Number(order.total),
     paymentMethod: order.payments[0]?.method ?? null,
+    kitchenStatus: order.kitchenStatus,
     customerId: order.customerId,
     customerName: order.customer?.name ?? null,
     pointsRedeemed: order.pointsRedeemed,
@@ -69,6 +70,20 @@ export class OrdersService {
     });
     if (products.length !== qtyByProduct.size) {
       throw new BadRequestException('มีสินค้าที่ไม่พร้อมขายในรายการ');
+    }
+
+    // Products with stock counting on must have enough on hand. Owner/manager can confirm an override
+    // (the counted number may simply be out of date); cashiers cannot.
+    const short = products
+      .filter((p) => p.trackStock && (qtyByProduct.get(p.id) ?? 0) > Number(p.stockQty))
+      .map((p) => ({ productId: p.id, name: p.name, available: Math.max(Number(p.stockQty), 0), requested: qtyByProduct.get(p.id) ?? 0 }));
+    if (short.length > 0 && !(dto.allowOversell && user.role !== 'cashier')) {
+      throw new ConflictException({
+        code: 'INSUFFICIENT_STOCK',
+        canOverride: user.role !== 'cashier',
+        items: short,
+        message: `สต็อกไม่พอ: ${short.map((s) => `${s.name} (เหลือ ${s.available}, ต้องการ ${s.requested})`).join(', ')}`,
+      });
     }
 
     const lines = products.map((product) => {
@@ -355,6 +370,29 @@ export class OrdersService {
     if (result.count === 0) {
       throw new NotFoundException('ไม่พบออเดอร์ที่ยังไม่ชำระเงิน');
     }
+  }
+
+  // Open and newly paid bills for the kitchen screen, oldest first (first in, first served); a bill
+  // drops off once marked served. No pagination: a kitchen queue is meant to be seen in full.
+  async kitchenQueue(shopId: number) {
+    const orders = await this.prisma.order.findMany({
+      where: { shopId, status: { in: ['open', 'paid'] }, kitchenStatus: { not: 'served' } },
+      include: orderInclude,
+      orderBy: { id: 'asc' },
+    });
+    return orders.map(toView);
+  }
+
+  async updateKitchenStatus(shopId: number, orderId: number, status: 'pending' | 'preparing' | 'ready' | 'served') {
+    const result = await this.prisma.order.updateMany({
+      where: { id: orderId, shopId, status: { in: ['open', 'paid'] } },
+      data: { kitchenStatus: status },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('ไม่พบออเดอร์');
+    }
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
+    return toView(order);
   }
 
   async list(shopId: number, query: ListOrdersDto) {

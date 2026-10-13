@@ -5,13 +5,16 @@ import { toast } from 'vue-sonner'
 import { Banknote, CreditCard, QrCode, Check } from '@lucide/vue'
 import { useCartStore } from '../../store/modules/cartStore'
 import { useShiftStore } from '../../store/modules/shiftStore'
-import { orderService, type OrderView } from '../../api/services/orderService'
-import { errorMessage } from '../../store/modules/productStore'
+import PromptPayQr from '../../components/PromptPayQr.vue'
+import { createOrderConfirmingStock, orderService, type OrderView } from '../../api/services/orderService'
+import { errorMessage, useProductStore } from '../../store/modules/productStore'
+import { getDisplayChannel } from '../../store/broadcast'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; paid: [payload: { order: OrderView; received: number; change: number }] }>()
 
 const cartStore = useCartStore()
+const productStore = useProductStore()
 const shiftStore = useShiftStore()
 const router = useRouter()
 
@@ -56,7 +59,7 @@ async function confirmPayment() {
   submitting.value = true
   let createdOrderId: number | null = null
   try {
-    const { data: created } = await orderService.create(cartStore.orderPayload())
+    const { data: created } = await createOrderConfirmingStock(cartStore.orderPayload())
     createdOrderId = created.data.id
     const serverTotal = created.data.total
     if (Math.abs(serverTotal - total.value) > 0.005) {
@@ -74,6 +77,8 @@ async function confirmPayment() {
     createdOrderId = null
     cartStore.clear()
     emit('close')
+    void productStore.load().catch(() => undefined)
+    getDisplayChannel()?.postMessage({ type: 'paid', order: { orderNumber: order.orderNumber, total: order.total }, change: changeAmount })
     emit('paid', { order, received: paid.data.received, change: changeAmount })
   } catch (error: unknown) {
     if (createdOrderId !== null) await orderService.discard(createdOrderId).catch(() => undefined)
@@ -118,6 +123,11 @@ function goOpenShift() {
             method.label
           }}</span>
         </button>
+      </div>
+
+      <div v-if="selected === 'qr'" class="mb-5">
+        <PromptPayQr :amount="total" />
+        <p class="mt-2 text-center text-xs text-text-muted">เมื่อลูกค้าโอนแล้ว กด "ยืนยัน" เพื่อบันทึกการขาย</p>
       </div>
 
       <div v-if="selected === 'cash'" class="mb-5 space-y-2">

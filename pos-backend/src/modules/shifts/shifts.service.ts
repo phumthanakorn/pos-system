@@ -1,5 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { expectedDrawerCash, round2 } from '../../common/helpers/money.js';
+import { Prisma } from '@prisma/client';
+import { PageQueryDto } from '../../common/dto/page-query.dto.js';
+import { resolvePaging, toPageResult } from '../../common/helpers/paginate.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CashMovementDto } from './dto/cash-movement.dto.js';
 import { CloseShiftDto } from './dto/close-shift.dto.js';
@@ -44,6 +47,102 @@ export class ShiftsService {
         reason: m.reason,
         createdAt: m.createdAt,
       })),
+    };
+  }
+
+  // Closed shifts, newest first. Figures are recomputed from the bills and cash movements of each shift
+  // (a closed shift can no longer change: no new bills, no voids), so they always match the day's records.
+  async history(shopId: number, query: PageQueryDto) {
+    const where: Prisma.ShiftWhereInput = { shopId, status: 'closed' };
+    const { page, pageSize, skip, take } = resolvePaging(query.page, query.pageSize);
+    const [shifts, total] = await Promise.all([
+      this.prisma.shift.findMany({
+        where,
+        orderBy: { id: 'desc' },
+        skip,
+        take,
+        include: { cashier: { select: { name: true } } },
+      }),
+      this.prisma.shift.count({ where }),
+    ]);
+    const ids = shifts.map((s) => s.id);
+    const [payRows, moveRows, cancelRows] = ids.length
+      ? await Promise.all([
+          this.prisma.$queryRaw<{ shiftId: number; method: 'cash' | 'card' | 'qr'; amount: unknown; cnt: bigint }[]>`
+            SELECT o.shift_id AS shiftId, p.method AS method, SUM(p.amount) AS amount, COUNT(*) AS cnt
+            FROM payments p JOIN orders o ON o.id = p.order_id
+            WHERE o.status = 'paid' AND o.shift_id IN (${Prisma.join(ids)})
+            GROUP BY o.shift_id, p.method`,
+          this.prisma.cashMovement.groupBy({
+            by: ['shiftId', 'type'],
+            where: { shiftId: { in: ids } },
+            _sum: { amount: true },
+          }),
+          this.prisma.order.groupBy({
+            by: ['shiftId'],
+            where: { shiftId: { in: ids }, status: 'cancelled', voidedAt: { not: null } },
+            _count: { _all: true },
+            _sum: { total: true },
+          }),
+        ])
+      : [[], [], []];
+
+    const items = shifts.map((shift) => {
+      const sales = { cash: 0, card: 0, qr: 0, total: 0, count: 0 };
+      for (const row of payRows.filter((r) => Number(r.shiftId) === shift.id)) {
+        const amount = Number(row.amount);
+        sales[row.method] = round2(amount);
+        sales.total = round2(sales.total + amount);
+        sales.count += Number(row.cnt);
+      }
+      const moved = (type: 'in' | 'out') =>
+        round2(Number(moveRows.find((m) => m.shiftId === shift.id && m.type === type)?._sum.amount ?? 0));
+      const cashIn = moved('in');
+      const cashOut = moved('out');
+      const openingCash = Number(shift.openingCash);
+      const expectedCash = expectedDrawerCash({ openingCash, cashSales: sales.cash, cashIn, cashOut });
+      const closingCash = Number(shift.closingCash ?? 0);
+      const cancelled = cancelRows.find((c) => c.shiftId === shift.id);
+      return {
+        id: shift.id,
+        cashierName: shift.cashier.name,
+        openedAt: shift.openedAt,
+        closedAt: shift.closedAt,
+        openingCash,
+        sales,
+        cashIn,
+        cashOut,
+        expectedCash,
+        closingCash,
+        difference: round2(closingCash - expectedCash),
+        cancelledCount: cancelled?._count._all ?? 0,
+        cancelledAmount: round2(Number(cancelled?._sum.total ?? 0)),
+      };
+    });
+    return toPageResult(items, total, page, pageSize);
+  }
+
+  async getById(shopId: number, id: number) {
+    const shift = await this.prisma.shift.findFirst({
+      where: { id, shopId },
+      include: { cashier: { select: { name: true } } },
+    });
+    if (!shift) {
+      throw new NotFoundException('ไม่พบกะ');
+    }
+    const openingCash = Number(shift.openingCash);
+    const summary = await this.summarize(shift.id, openingCash);
+    const closingCash = shift.closingCash === null ? null : Number(shift.closingCash);
+    return {
+      id: shift.id,
+      status: shift.status,
+      cashierName: shift.cashier.name,
+      openedAt: shift.openedAt,
+      closedAt: shift.closedAt,
+      openingCash,
+      closingCash,
+      difference: closingCash === null ? null : round2(closingCash - summary.expectedCash),
+      ...summary,
     };
   }
 

@@ -1,7 +1,7 @@
 import { apiClient } from '../client'
 
 export const paymentService = {
-  pay(orderId: number, payload: unknown) {
-    return apiClient.post(`/orders/${orderId}/payments`, payload)
+  promptPay(amount: number) {
+    return apiClient.get<{ data: { configured: boolean; payload: string | null } }>('/payments/promptpay', { params: { amount } })
   },
 }

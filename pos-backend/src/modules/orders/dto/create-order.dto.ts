@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsInt, IsOptional, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrderItemDto {
@@ -24,6 +24,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsInt()
   customerId?: number;
+
+  // owner/manager only: sell even when a counted product has less stock than requested
+  @IsOptional()
+  @IsBoolean()
+  allowOversell?: boolean;
 
   @IsOptional()
   @IsInt()
