@@ -303,8 +303,16 @@ export class OrdersService {
             data: { stockQty: { decrement: qty } },
           });
           if (moved.count === 0) continue;
+          const after = await tx.product.findUniqueOrThrow({ where: { id: item.productId }, select: { stockQty: true } });
           await tx.stockMovement.create({
-            data: { productId: item.productId, type: 'sale', qty, note: `ออเดอร์ ${order.orderNumber}` },
+            data: {
+              shopId,
+              productId: item.productId,
+              type: 'sale',
+              qty: -qty,
+              balanceAfter: after.stockQty,
+              note: `ออเดอร์ ${order.orderNumber}`,
+            },
           });
         }
       });
@@ -350,8 +358,16 @@ export class OrdersService {
           data: { stockQty: { increment: qty } },
         });
         if (moved.count === 0) continue;
+        const after = await tx.product.findUniqueOrThrow({ where: { id: item.productId }, select: { stockQty: true } });
         await tx.stockMovement.create({
-          data: { productId: item.productId, type: 'adjustment', qty, note: `ยกเลิกออเดอร์ ${order.orderNumber}` },
+          data: {
+            shopId,
+            productId: item.productId,
+            type: 'adjustment',
+            qty,
+            balanceAfter: after.stockQty,
+            note: `ยกเลิกออเดอร์ ${order.orderNumber}`,
+          },
         });
       }
     });

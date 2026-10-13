@@ -53,6 +53,12 @@ const router = createRouter({
           component: () => import('../modules/receipts/ReceiptsView.vue'),
         },
         {
+          path: 'stock',
+          name: 'stock',
+          component: () => import('../modules/stock/StockView.vue'),
+          meta: { roles: ['owner', 'manager'] },
+        },
+        {
           path: 'inventory',
           name: 'inventory',
           component: () => import('../modules/inventory/InventoryView.vue'),

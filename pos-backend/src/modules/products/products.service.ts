@@ -7,9 +7,11 @@ import {
 import { Prisma, type Product } from '@prisma/client';
 import { CodesService } from '../../common/codes/codes.service.js';
 import { resolvePaging, toPageResult } from '../../common/helpers/paginate.js';
+import { PageQueryDto } from '../../common/dto/page-query.dto.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ListProductsDto } from './dto/list-products.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 
 const DEFAULT_UNIT = 'ชิ้น';
@@ -50,12 +52,84 @@ function mapWriteError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+function toMovementView(m: { id: number; type: string; qty: Prisma.Decimal; balanceAfter: Prisma.Decimal; note: string | null; createdAt: Date; createdBy: { name: string } | null }) {
+  return {
+    id: m.id,
+    type: m.type,
+    qty: Number(m.qty),
+    balanceAfter: Number(m.balanceAfter),
+    note: m.note,
+    createdByName: m.createdBy?.name ?? null,
+    createdAt: m.createdAt,
+  };
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly codes: CodesService,
   ) {}
+
+  // Products with stock counting on, at or below their minimum (minStock = 0 means "no alert set").
+  async lowStock(shopId: number) {
+    const products = await this.prisma.product.findMany({
+      where: { shopId, trackStock: true, isActive: true, minStock: { gt: 0 } },
+      orderBy: { name: 'asc' },
+    });
+    return products
+      .filter((p) => Number(p.stockQty) <= Number(p.minStock))
+      .map(toView);
+  }
+
+  async adjustStock(shopId: number, userId: number, productId: number, dto: StockAdjustmentDto) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, shopId } });
+    if (!product) {
+      throw new NotFoundException('ไม่พบสินค้า');
+    }
+    if (!product.trackStock) {
+      throw new BadRequestException('สินค้านี้ไม่ได้เปิดนับสต็อก กรุณาเปิดที่หน้าแก้ไขสินค้าก่อน');
+    }
+    const nextQty = Number(product.stockQty) + dto.qty;
+    if (nextQty < 0) {
+      throw new BadRequestException(`ปรับแล้วสต็อกจะติดลบ (ปัจจุบันเหลือ ${Number(product.stockQty)})`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({ where: { id: productId }, data: { stockQty: nextQty } });
+      await tx.stockMovement.create({
+        data: {
+          shopId,
+          productId,
+          type: dto.type,
+          qty: dto.qty,
+          balanceAfter: nextQty,
+          note: dto.note.trim(),
+          createdById: userId,
+        },
+      });
+    });
+    return toView(await this.prisma.product.findUniqueOrThrow({ where: { id: productId } }));
+  }
+
+  async stockMovements(shopId: number, productId: number, query: PageQueryDto) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, shopId }, select: { id: true } });
+    if (!product) {
+      throw new NotFoundException('ไม่พบสินค้า');
+    }
+    const { page, pageSize, skip, take } = resolvePaging(query.page, query.pageSize);
+    const where = { productId };
+    const [rows, total] = await Promise.all([
+      this.prisma.stockMovement.findMany({
+        where,
+        include: { createdBy: { select: { name: true } } },
+        orderBy: { id: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.stockMovement.count({ where }),
+    ]);
+    return toPageResult(rows.map(toMovementView), total, page, pageSize);
+  }
 
   // Everything the till can sell. Not paginated on purpose: the POS grid needs the whole active menu to filter instantly.
   async findSellable(shopId: number) {

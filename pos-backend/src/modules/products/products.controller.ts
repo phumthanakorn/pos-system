@@ -22,6 +22,8 @@ import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { AuthenticatedUser, requireShopId } from '../../common/helpers/require-shop.js';
 import { ListProductsDto } from './dto/list-products.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto.js';
+import { PageQueryDto } from '../../common/dto/page-query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
 
@@ -58,6 +60,26 @@ export class ProductsController {
   }
 
   @Roles('owner', 'manager')
+  @Get('low-stock')
+  lowStock(@Req() req: { user: AuthenticatedUser }) {
+    return this.productsService.lowStock(requireShopId(req.user));
+  }
+
+  @Roles('owner', 'manager')
+  @Post(':id/stock-adjustments')
+  adjustStock(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: StockAdjustmentDto,
+  ) {
+    return this.productsService.adjustStock(requireShopId(req.user), req.user.id, id, dto);
+  }
+
+  @Get(':id/stock-movements')
+  stockMovements(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseIntPipe) id: number, @Query() query: PageQueryDto) {
+    return this.productsService.stockMovements(requireShopId(req.user), id, query);
+  }
+
   @Delete(':id')
   async remove(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseIntPipe) id: number) {
     const shopId = requireShopId(req.user);

@@ -1,5 +1,6 @@
 import { apiClient } from '../client'
 import type { PageResult } from '../types'
+import type { Product } from '../../store/modules/productStore'
 
 export interface ProductInput {
   name: string
@@ -67,4 +68,24 @@ export const productService = {
   deleteCategory(id: number) {
     return apiClient.delete(`/categories/${id}`)
   },
+  lowStock() {
+    return apiClient.get<{ data: Product[] }>('/products/low-stock')
+  },
+  adjustStock(id: number, payload: { qty: number; type: 'purchase' | 'adjustment'; note: string }) {
+    return apiClient.post<{ data: Product }>(`/products/${id}/stock-adjustments`, payload)
+  },
+  stockMovements(id: number, params: { page: number; pageSize: number }) {
+    return apiClient.get<{ data: PageResult<StockMovement> }>(`/products/${id}/stock-movements`, { params })
+  },
 }
+
+export interface StockMovement {
+  id: number
+  type: 'purchase' | 'sale' | 'adjustment'
+  qty: number
+  balanceAfter: number
+  note: string | null
+  createdByName: string | null
+  createdAt: string
+}
+

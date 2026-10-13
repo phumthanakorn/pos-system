@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Package,
+  Boxes,
   Timer,
   History,
   UtensilsCrossed,
@@ -43,7 +44,8 @@ const allGroups: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/products', label: 'เมนูและสินค้า', icon: UtensilsCrossed, roles: ['owner', 'manager'] },
       { to: '/discounts', label: 'ส่วนลดและโปรโมชั่น', icon: Percent, roles: ['owner', 'manager'] },
-      { to: '/inventory', label: 'คลังวัตถุดิบ', icon: Package, roles: ['owner', 'manager'] },
+      { to: '/stock', label: 'สต็อกสินค้า', icon: Package, roles: ['owner', 'manager'] },
+      { to: '/inventory', label: 'คลังวัตถุดิบ', icon: Boxes, roles: ['owner', 'manager'] },
       { to: '/loyalty', label: 'ลูกค้าและสมาชิก', icon: Ticket },
       { to: '/staff', label: 'พนักงาน', icon: Users, roles: ['owner', 'manager'] },
     ],
