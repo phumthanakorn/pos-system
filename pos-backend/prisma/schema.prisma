@@ -1,0 +1,413 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  cashier
+  manager
+  owner
+}
+
+enum ShopType {
+  restaurant
+  retail
+  cafe
+  salon
+  nail
+}
+
+enum CashMovementType {
+  in
+  out
+}
+
+enum ShiftStatus {
+  open
+  closed
+}
+
+enum OrderStatus {
+  open
+  paid
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  card
+  qr
+}
+
+enum DiscountType {
+  percent
+  amount
+}
+
+enum StockMovementType {
+  purchase
+  sale
+  adjustment
+}
+
+/// ร้านค้า/กิจการ — จุดศูนย์กลางของ multi-tenancy ทุกตารางด้านล่างสโคปด้วย shopId
+model Shop {
+  id         Int      @id @default(autoincrement())
+  name       String
+  slug       String   @unique
+  type       ShopType @default(restaurant)
+  hasDineIn  Boolean  @default(false) @map("has_dine_in")
+  phone      String?
+  address    String?
+  logoAbbr   String?  @map("logo_abbr")
+  logoUrl    String?  @map("logo_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  users               User[]
+  shifts              Shift[]
+  categories          Category[]
+  products            Product[]
+  orders              Order[]
+  discountsPromotions DiscountPromotion[]
+  taxSettings         TaxSetting[]
+  customers           Customer[]
+  settings            Setting[]
+  ingredientCategories IngredientCategory[]
+  ingredients         Ingredient[]
+
+  @@map("shops")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  shopId    Int?     @map("shop_id")
+  shop      Shop?    @relation(fields: [shopId], references: [id])
+  name      String
+  email     String   @unique
+  username  String
+  password  String
+  role      Role     @default(cashier)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  shifts Shift[]
+  orders Order[]
+
+  @@unique([shopId, username])
+  @@map("users")
+}
+
+model Shift {
+  id          Int         @id @default(autoincrement())
+  shopId      Int         @map("shop_id")
+  shop        Shop        @relation(fields: [shopId], references: [id])
+  cashierId   Int         @map("cashier_id")
+  cashier     User        @relation(fields: [cashierId], references: [id])
+  status      ShiftStatus @default(open)
+  openingCash Decimal     @map("opening_cash") @db.Decimal(12, 2)
+  closingCash Decimal?    @map("closing_cash") @db.Decimal(12, 2)
+  openedAt    DateTime    @default(now()) @map("opened_at")
+  closedAt    DateTime?   @map("closed_at")
+
+  orders Order[]
+  cashMovements CashMovement[]
+
+  @@map("shifts")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  shopId    Int      @map("shop_id")
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id         Int       @id @default(autoincrement())
+  shopId     Int       @map("shop_id")
+  shop       Shop      @relation(fields: [shopId], references: [id])
+  categoryId Int?      @map("category_id")
+  category   Category? @relation(fields: [categoryId], references: [id])
+  name       String
+  sku        String?
+  barcode    String?
+  description String?  @db.Text
+  imageUrl   String?   @map("image_url")
+  unit       String    @default("piece")
+  price      Decimal   @db.Decimal(12, 2)
+  cost       Decimal?  @db.Decimal(12, 2)
+  stockQty   Decimal   @default(0) @map("stock_qty") @db.Decimal(12, 3)
+  minStock   Decimal   @default(0) @map("min_stock") @db.Decimal(12, 3)
+  trackStock Boolean   @default(false) @map("track_stock")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  variants       ProductVariant[]
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
+
+  @@unique([shopId, barcode])
+  @@unique([shopId, sku])
+  @@map("products")
+}
+
+model ProductVariant {
+  id        Int      @id @default(autoincrement())
+  productId Int      @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id])
+  name      String
+  sku       String?  @unique
+  priceDiff Decimal  @default(0) @map("price_diff") @db.Decimal(12, 2)
+  stockQty  Decimal  @default(0) @map("stock_qty") @db.Decimal(12, 3)
+
+  orderItems OrderItem[]
+
+  @@map("product_variants")
+}
+
+model StockMovement {
+  id        Int               @id @default(autoincrement())
+  productId Int               @map("product_id")
+  product   Product           @relation(fields: [productId], references: [id])
+  type      StockMovementType
+  qty       Decimal           @db.Decimal(12, 3)
+  note      String?
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@map("stock_movements")
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  shopId      Int         @map("shop_id")
+  shop        Shop        @relation(fields: [shopId], references: [id])
+  orderNumber String      @map("order_number")
+  cashierId   Int         @map("cashier_id")
+  cashier     User        @relation(fields: [cashierId], references: [id])
+  shiftId     Int         @map("shift_id")
+  shift       Shift       @relation(fields: [shiftId], references: [id])
+  status      OrderStatus @default(open)
+  subtotal    Decimal     @default(0) @db.Decimal(12, 2)
+  discount    Decimal     @default(0) @db.Decimal(12, 2)
+  tax         Decimal     @default(0) @db.Decimal(12, 2)
+  total       Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  discountName String?    @map("discount_name")
+  voidReason  String?     @map("void_reason")
+  voidedAt    DateTime?   @map("voided_at")
+  voidedById  Int?        @map("voided_by_id")
+
+  customerId     Int?      @map("customer_id")
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  pointsRedeemed Int       @default(0) @map("points_redeemed")
+  pointsEarned   Int       @default(0) @map("points_earned")
+  pointEntries   PointTransaction[]
+
+  items    OrderItem[]
+  payments Payment[]
+  receipt  Receipt?
+
+  @@unique([shopId, orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               Int             @id @default(autoincrement())
+  orderId          Int             @map("order_id")
+  order            Order           @relation(fields: [orderId], references: [id])
+  productId        Int             @map("product_id")
+  product          Product         @relation(fields: [productId], references: [id])
+  productVariantId Int?            @map("product_variant_id")
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  qty              Decimal         @db.Decimal(12, 3)
+  price            Decimal         @db.Decimal(12, 2)
+  discount         Decimal         @default(0) @db.Decimal(12, 2)
+
+  @@map("order_items")
+}
+
+model Payment {
+  id      Int           @id @default(autoincrement())
+  orderId Int           @map("order_id")
+  order   Order         @relation(fields: [orderId], references: [id])
+  method  PaymentMethod
+  amount  Decimal       @db.Decimal(12, 2)
+  paidAt  DateTime      @default(now()) @map("paid_at")
+
+  @@map("payments")
+}
+
+model DiscountPromotion {
+  id        Int          @id @default(autoincrement())
+  shopId    Int          @map("shop_id")
+  shop      Shop         @relation(fields: [shopId], references: [id])
+  name      String
+  type      DiscountType
+  value     Decimal      @db.Decimal(12, 2)
+  isActive  Boolean      @default(true) @map("is_active")
+  managerOnly Boolean    @default(false) @map("manager_only")
+  startsAt  DateTime?    @map("starts_at")
+  endsAt    DateTime?    @map("ends_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@map("discounts_promotions")
+}
+
+model TaxSetting {
+  id          Int      @id @default(autoincrement())
+  shopId      Int      @map("shop_id")
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  name        String
+  rate        Decimal  @db.Decimal(5, 2)
+  isInclusive Boolean  @default(true) @map("is_inclusive")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  @@map("tax_settings")
+}
+
+model Customer {
+  id            Int      @id @default(autoincrement())
+  shopId        Int      @map("shop_id")
+  shop          Shop     @relation(fields: [shopId], references: [id])
+  name          String
+  phone         String?
+  loyaltyPoints Int      @default(0) @map("loyalty_points")
+  note          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  orders       Order[]
+  pointEntries PointTransaction[]
+
+  @@unique([shopId, phone])
+  @@map("customers")
+}
+
+model Receipt {
+  id            Int      @id @default(autoincrement())
+  shopId        Int      @map("shop_id")
+  orderId       Int      @unique @map("order_id")
+  order         Order    @relation(fields: [orderId], references: [id])
+  receiptNumber String   @map("receipt_number")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([shopId, receiptNumber])
+  @@map("receipts")
+}
+
+model Setting {
+  id     Int    @id @default(autoincrement())
+  shopId Int    @map("shop_id")
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  key    String
+  value  String
+
+  @@unique([shopId, key])
+  @@map("settings")
+}
+
+model IngredientCategory {
+  id        Int          @id @default(autoincrement())
+  shopId    Int          @map("shop_id")
+  shop      Shop         @relation(fields: [shopId], references: [id])
+  name      String
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  ingredients Ingredient[]
+
+  @@map("ingredient_categories")
+}
+
+model Ingredient {
+  id           Int                 @id @default(autoincrement())
+  shopId       Int                 @map("shop_id")
+  shop         Shop                @relation(fields: [shopId], references: [id])
+  categoryId   Int?                @map("category_id")
+  category     IngredientCategory? @relation(fields: [categoryId], references: [id])
+  name         String
+  sku          String?
+  barcode      String?
+  unit         String              @default("g")
+  costPerUnit  Decimal             @default(0) @map("cost_per_unit") @db.Decimal(12, 4)
+  stockQty     Decimal             @default(0) @map("stock_qty") @db.Decimal(12, 3)
+  minStock     Decimal             @default(0) @map("min_stock") @db.Decimal(12, 3)
+  supplierName String?             @map("supplier_name")
+  yieldPercent Decimal             @default(100) @map("yield_percent") @db.Decimal(5, 2)
+  purchaseUnit String?             @map("purchase_unit")
+  purchaseQty  Decimal?            @map("purchase_qty") @db.Decimal(12, 3)
+  purchasePrice Decimal?           @map("purchase_price") @db.Decimal(12, 2)
+  note         String?
+  isActive     Boolean             @default(true) @map("is_active")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  @@unique([shopId, sku])
+  @@unique([shopId, barcode])
+  @@map("ingredients")
+}
+
+/// ตัวนับเลขเอกสารต่อร้าน/ประเภท/วัน (เช่น เลขออเดอร์ที่รันใหม่ทุกวัน)
+model DocumentCounter {
+  shopId  Int    @map("shop_id")
+  kind    String @db.VarChar(20)
+  day     String @db.VarChar(8)
+  lastSeq Int    @default(0) @map("last_seq")
+
+  @@id([shopId, kind, day])
+  @@map("document_counters")
+}
+
+/// เงินสดเข้า/ออกลิ้นชักระหว่างกะ (เช่น เติมเงินทอน, จ่ายค่าของ) ไม่รวมยอดขาย
+model CashMovement {
+  id          Int              @id @default(autoincrement())
+  shopId      Int              @map("shop_id")
+  shiftId     Int              @map("shift_id")
+  shift       Shift            @relation(fields: [shiftId], references: [id])
+  type        CashMovementType
+  amount      Decimal          @db.Decimal(12, 2)
+  reason      String
+  createdById Int              @map("created_by_id")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([shiftId])
+  @@map("cash_movements")
+}
+
+enum PointType {
+  earn
+  redeem
+  reverse_earn
+  refund_redeem
+  adjust
+}
+
+// Every change to a customer's points is a row here; customers.loyalty_points is the running balance.
+model PointTransaction {
+  id           Int       @id @default(autoincrement())
+  shopId       Int       @map("shop_id")
+  customerId   Int       @map("customer_id")
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderId      Int?      @map("order_id")
+  order        Order?    @relation(fields: [orderId], references: [id])
+  type         PointType
+  points       Int
+  balanceAfter Int       @map("balance_after")
+  note         String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([customerId, createdAt])
+  @@map("point_transactions")
+}
