@@ -5,6 +5,7 @@ import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { AuthenticatedUser, requireShopId } from '../../common/helpers/require-shop.js';
 import { CategoriesService } from './categories.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
+import { ReorderCategoriesDto } from './dto/reorder-categories.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
 
 @UseGuards(AuthGuard, RolesGuard)
@@ -21,6 +22,12 @@ export class CategoriesController {
   @Post()
   create(@Req() req: { user: AuthenticatedUser }, @Body() dto: CreateCategoryDto) {
     return this.categoriesService.create(requireShopId(req.user), dto);
+  }
+
+  @Roles('owner', 'manager')
+  @Patch('reorder')
+  reorder(@Req() req: { user: AuthenticatedUser }, @Body() dto: ReorderCategoriesDto) {
+    return this.categoriesService.reorder(requireShopId(req.user), dto.ids);
   }
 
   @Roles('owner', 'manager')

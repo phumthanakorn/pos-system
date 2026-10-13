@@ -4,6 +4,7 @@ import { productService, type ProductInput } from '../../api/services/productSer
 export interface Category {
   id: number
   name: string
+  sortOrder: number
   productCount?: number
 }
 
@@ -101,6 +102,18 @@ export const useProductStore = defineStore('product', {
     async deleteCategory(id: number) {
       await productService.deleteCategory(id)
       this.categories = this.categories.filter((c) => c.id !== id)
+    },
+    // optimistic: the list reorders immediately, and is corrected from the server's response
+    async reorderCategories(ids: number[]) {
+      const previous = this.categories
+      this.categories = ids.map((id) => previous.find((c) => c.id === id)).filter((c): c is Category => c !== undefined)
+      try {
+        const { data } = await productService.reorderCategories(ids)
+        this.categories = data.data
+      } catch (error) {
+        this.categories = previous
+        throw error
+      }
     },
   },
 })

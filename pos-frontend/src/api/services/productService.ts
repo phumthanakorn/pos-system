@@ -1,6 +1,6 @@
 import { apiClient } from '../client'
 import type { PageResult } from '../types'
-import type { Product } from '../../store/modules/productStore'
+import type { Category, Product } from '../../store/modules/productStore'
 
 export interface ProductInput {
   name: string
@@ -67,6 +67,9 @@ export const productService = {
   },
   deleteCategory(id: number) {
     return apiClient.delete(`/categories/${id}`)
+  },
+  reorderCategories(ids: number[]) {
+    return apiClient.patch<{ data: Category[] }>('/categories/reorder', { ids })
   },
   lowStock() {
     return apiClient.get<{ data: Product[] }>('/products/low-stock')

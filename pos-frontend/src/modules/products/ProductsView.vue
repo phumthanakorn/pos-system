@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { toast } from 'vue-sonner'
-import { Tag, Pencil, Trash2, Plus, Check, X, ImagePlus, Wand2 } from '@lucide/vue'
+import { Tag, Pencil, Trash2, Plus, Check, X, ImagePlus, Wand2, ChevronUp, ChevronDown } from '@lucide/vue'
 import { useProductStore, errorMessage, imageSrc, type Product } from '../../store/modules/productStore'
 import type { ProductInput } from '../../api/services/productService'
 import { codeService } from '../../api/services/codeService'
@@ -284,6 +284,20 @@ async function removeCategory(id: number) {
     showError(error, 'ลบหมวดหมู่ไม่สำเร็จ')
   }
 }
+
+// moves a category earlier/later in the display order shown on the POS screen
+async function moveCategory(id: number, direction: -1 | 1) {
+  const ids = productStore.categories.map((c) => c.id)
+  const index = ids.indexOf(id)
+  const swapWith = index + direction
+  if (swapWith < 0 || swapWith >= ids.length) return
+  ;[ids[index], ids[swapWith]] = [ids[swapWith], ids[index]]
+  try {
+    await productStore.reorderCategories(ids)
+  } catch (error: unknown) {
+    showError(error, 'จัดลำดับหมวดหมู่ไม่สำเร็จ')
+  }
+}
 </script>
 
 <template>
@@ -445,21 +459,41 @@ async function removeCategory(id: number) {
             <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
               <component :is="iconForCategory(cat.id)" class="h-5 w-5" :stroke-width="1.75" />
             </span>
-            <div v-if="editingCategoryId !== cat.id" class="flex gap-1 opacity-0 transition group-hover:opacity-100">
-              <button
-                class="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-bg hover:text-primary"
-                title="แก้ไข"
-                @click="startEditCategory(cat.id, cat.name)"
-              >
-                <Pencil class="h-4 w-4" :stroke-width="1.75" />
-              </button>
-              <button
-                class="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-danger/10 hover:text-danger"
-                title="ลบ"
-                @click="removeCategory(cat.id)"
-              >
-                <Trash2 class="h-4 w-4" :stroke-width="1.75" />
-              </button>
+            <div v-if="editingCategoryId !== cat.id" class="flex gap-1">
+              <div class="flex flex-col opacity-0 transition group-hover:opacity-100">
+                <button
+                  class="flex h-4 w-6 items-center justify-center rounded text-text-muted hover:bg-bg hover:text-primary disabled:pointer-events-none disabled:opacity-30"
+                  title="เลื่อนขึ้น"
+                  :disabled="productStore.categories[0]?.id === cat.id"
+                  @click="moveCategory(cat.id, -1)"
+                >
+                  <ChevronUp class="h-3.5 w-3.5" :stroke-width="2" />
+                </button>
+                <button
+                  class="flex h-4 w-6 items-center justify-center rounded text-text-muted hover:bg-bg hover:text-primary disabled:pointer-events-none disabled:opacity-30"
+                  title="เลื่อนลง"
+                  :disabled="productStore.categories[productStore.categories.length - 1]?.id === cat.id"
+                  @click="moveCategory(cat.id, 1)"
+                >
+                  <ChevronDown class="h-3.5 w-3.5" :stroke-width="2" />
+                </button>
+              </div>
+              <div class="flex gap-1 opacity-0 transition group-hover:opacity-100">
+                <button
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-bg hover:text-primary"
+                  title="แก้ไข"
+                  @click="startEditCategory(cat.id, cat.name)"
+                >
+                  <Pencil class="h-4 w-4" :stroke-width="1.75" />
+                </button>
+                <button
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-danger/10 hover:text-danger"
+                  title="ลบ"
+                  @click="removeCategory(cat.id)"
+                >
+                  <Trash2 class="h-4 w-4" :stroke-width="1.75" />
+                </button>
+              </div>
             </div>
           </div>
 

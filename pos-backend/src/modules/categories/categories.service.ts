@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
@@ -10,16 +10,29 @@ export class CategoriesService {
   findAll(shopId: number) {
     return this.prisma.category.findMany({
       where: { shopId },
-      select: { id: true, name: true, _count: { select: { products: true } } },
-      orderBy: { id: 'asc' },
-    }).then((rows) => rows.map((row) => ({ id: row.id, name: row.name, productCount: row._count.products })));
+      select: { id: true, name: true, sortOrder: true, _count: { select: { products: true } } },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    }).then((rows) => rows.map((row) => ({ id: row.id, name: row.name, sortOrder: row.sortOrder, productCount: row._count.products })));
   }
 
-  create(shopId: number, dto: CreateCategoryDto) {
+  async create(shopId: number, dto: CreateCategoryDto) {
+    // new categories go to the end of the list
+    const last = await this.prisma.category.aggregate({ where: { shopId }, _max: { sortOrder: true } });
     return this.prisma.category.create({
-      data: { shopId, name: dto.name.trim() },
-      select: { id: true, name: true },
+      data: { shopId, name: dto.name.trim(), sortOrder: (last._max.sortOrder ?? 0) + 1 },
+      select: { id: true, name: true, sortOrder: true },
     });
+  }
+
+  // ids in the desired display order; every category of this shop must be present exactly once
+  async reorder(shopId: number, ids: number[]) {
+    const categories = await this.prisma.category.findMany({ where: { shopId }, select: { id: true } });
+    const existing = new Set(categories.map((c) => c.id));
+    if (ids.length !== existing.size || !ids.every((id) => existing.has(id)) || new Set(ids).size !== ids.length) {
+      throw new BadRequestException('รายการหมวดหมู่ไม่ตรงกับร้านนี้');
+    }
+    await this.prisma.$transaction(ids.map((id, index) => this.prisma.category.update({ where: { id }, data: { sortOrder: index } })));
+    return this.findAll(shopId);
   }
 
   async update(shopId: number, id: number, dto: UpdateCategoryDto) {
@@ -27,7 +40,7 @@ export class CategoriesService {
     return this.prisma.category.update({
       where: { id },
       data: { name: dto.name.trim() },
-      select: { id: true, name: true },
+      select: { id: true, name: true, sortOrder: true },
     });
   }
 
